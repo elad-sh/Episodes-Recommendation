@@ -14,7 +14,7 @@ load_dotenv()
 
 llm = HuggingFaceHub(
     repo_id="HuggingFaceH4/zephyr-7b-beta",
-    model_kwargs={"temperature": 0.7, "max_new_tokens": 256}
+    model_kwargs={"temperature": 0.5, "max_new_tokens": 256}
 )
 
 recommender = EpisodeRecommender()
@@ -23,6 +23,11 @@ def analyze_user_query(user_input, memory):
     """Analyze user input to determine what kind of recommendation they want."""
     # Convert to lowercase for easier matching
     query = user_input.lower()
+    
+    # Check for acknowledgments or confirmations
+    acknowledgment_phrases = ["ok", "okay", "sure", "yes", "i will", "i'll watch", "thanks", "thank you"]
+    if any(phrase in query for phrase in acknowledgment_phrases):
+        return "acknowledgment"  # Special flag to indicate acknowledgment
     
     # Check for season-specific queries
     if "season" in query:
@@ -79,14 +84,9 @@ def analyze_user_query(user_input, memory):
     return [episodes[0]] if episodes else []
 
 def clean_response(response):
-    """Clean the response to only include the natural sentence."""
-    # Remove any extra whitespace
-    response = response.strip()
-    
-    # Remove any "Format:" or "Example:" lines
-    lines = [line for line in response.split('\n') if not line.startswith(('Format:', 'Example:'))]
-    response = '\n'.join(lines).strip()
-    
+    # Split the response by "Assistant:" and take the last part
+    if "Assistant:" in response:
+        response = response.split("Assistant:")[-1].strip()
     return response
 
 def run_chat():
@@ -111,14 +111,18 @@ def run_chat():
 
         # Get relevant episodes based on user query and conversation history
         relevant_episodes = analyze_user_query(user_input, memory)
+        
+        if relevant_episodes == "acknowledgment":
+            print("Bot: Great! Enjoy watching! Would you like another recommendation?")
+            continue
+            
         if not relevant_episodes:
             print("No episodes found matching your criteria.")
             continue
-            
+        
         episodes_info = recommender.format_episode(relevant_episodes[0])
 
         messages = EPISODE_RECOMMENDER_PROMPT.format_messages(
-            history=memory.buffer,
             user_input=user_input,
             episodes_info=episodes_info
         )
